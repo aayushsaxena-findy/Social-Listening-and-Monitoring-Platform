@@ -1,0 +1,29 @@
+/**
+ * Normalizes disparate data formats into a single internal tracking schema
+ */
+class TrackingService {
+  async trackEvent(platform, eventData) {
+    const standardizedEvent = {
+      platform,
+      externalId: eventData.id,
+      sender: eventData.from || eventData.sender,
+      content: eventData.text || eventData.message,
+      timestamp: new Date(),
+      metadata: eventData.metadata || {}
+    };
+
+    // 1. Save to Database (e.g., PostgreSQL)
+    await this.saveToDb(standardizedEvent);
+
+    // 2. Broadcast to Real-time Dashboard via WebSockets
+    this.broadcastToDashboard(standardizedEvent);
+    
+    return standardizedEvent;
+  }
+
+  async saveToDb(event) {
+    console.log(`[DB] Logged ${event.platform} event from ${event.sender}`);
+  }
+}
+
+module.exports = new TrackingService();
