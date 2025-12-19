@@ -1,0 +1,55 @@
+const express = require('express');
+const crypto = require('crypto');
+const trackingService = require('./services/TrackingService');
+
+const app = express();
+app.use(express.json());
+
+// --- 1. META INTEGRATION (Facebook, Instagram, WhatsApp) ---
+// Meta uses a shared Webhook verification and payload structure
+app.post('/webhooks/meta', (req, res) => {
+  const { object, entry } = req.body;
+
+  entry.forEach(item => {
+    // Distinguish between IG, FB, and WhatsApp based on the 'object' field
+    const platform = object === 'instagram' ? 'INSTAGRAM' : 
+                     object === 'whatsapp_business_account' ? 'WHATSAPP' : 'FACEBOOK';
+
+    item.changes?.forEach(change => {
+      trackingService.trackEvent(platform, {
+        id: change.value.message_id || change.value.id,
+        from: change.value.from?.id || 'System',
+        text: change.value.text?.body || change.value.message,
+        metadata: { type: change.field }
+      });
+    });
+  });
+  
+  res.sendStatus(200);
+});
+
+// Meta Webhook Verification (Required for setup)
+app.get('/webhooks/meta', (req, res) => {
+  if (req.query['hub.verify_token'] === process.env.META_VERIFY_TOKEN) {
+    return res.send(req.query['hub.challenge']);
+  }
+  res.sendStatus(403);
+});
+
+// --- 2. LIVECHAT INTEGRATION ---
+app.post('/webhooks/livechat', (req, res) => {
+  const { event_type, payload } = req.body;
+
+  if (event_type === 'incoming_event') {
+    trackingService.trackEvent('LIVECHAT', {
+      id: payload.event.id,
+      from: payload.chat.users[0].name,
+      text: payload.event.text,
+      metadata: { chat_id: payload.chat.id }
+    });
+  }
+  res.sendStatus(200);
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Tracking Server active on port ${PORT}`));
